@@ -107,6 +107,7 @@ void Tutorial02_Cube::CreatePipelineState()
     }
 
     // clang-format off
+    /*
     // Define vertex shader input layout
     LayoutElement LayoutElems[] =
     {
@@ -118,12 +119,19 @@ void Tutorial02_Cube::CreatePipelineState()
     // clang-format on
     PSODesc.GraphicsPipeline.InputLayout.LayoutElements = LayoutElems;
     PSODesc.GraphicsPipeline.InputLayout.NumElements    = _countof(LayoutElems);
+     */
 
     PSODesc.GraphicsPipeline.pVS = pVS;
     PSODesc.GraphicsPipeline.pPS = pPS;
 
     // Define variable type that will be used by default
+    const ShaderResourceVariableDesc buffersVariables[] = {
+        ShaderResourceVariableDesc(SHADER_TYPE_VERTEX, "vertices", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC),
+        ShaderResourceVariableDesc(SHADER_TYPE_VERTEX, "indices", SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC),
+    };
     PSODesc.ResourceLayout.DefaultVariableType = SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
+    PSODesc.ResourceLayout.NumVariables = 2;
+    PSODesc.ResourceLayout.Variables = buffersVariables;
 
     m_pDevice->CreatePipelineState(PSODesc, &m_pPSO);
 
@@ -141,7 +149,7 @@ void Tutorial02_Cube::CreateVertexBuffer()
     // Layout of this structure matches the one we defined in the pipeline state
     struct Vertex
     {
-        float3 pos;
+        float4 pos;
         float4 color;
     };
 
@@ -165,28 +173,33 @@ void Tutorial02_Cube::CreateVertexBuffer()
     // clang-format off
     Vertex CubeVerts[8] =
     {
-        {float3(-1,-1,-1), float4(1,0,0,1)},
-        {float3(-1,+1,-1), float4(0,1,0,1)},
-        {float3(+1,+1,-1), float4(0,0,1,1)},
-        {float3(+1,-1,-1), float4(1,1,1,1)},
+        {float4(-1,-1,-1,0), float4(1,0,0,1)},
+        {float4(-1,+1,-1,0), float4(0,1,0,1)},
+        {float4(+1,+1,-1,0), float4(0,0,1,1)},
+        {float4(+1,-1,-1,0), float4(1,1,1,1)},
 
-        {float3(-1,-1,+1), float4(1,1,0,1)},
-        {float3(-1,+1,+1), float4(0,1,1,1)},
-        {float3(+1,+1,+1), float4(1,0,1,1)},
-        {float3(+1,-1,+1), float4(0.2f,0.2f,0.2f,1)},
+        {float4(-1,-1,+1,0), float4(1,1,0,1)},
+        {float4(-1,+1,+1,0), float4(0,1,1,1)},
+        {float4(+1,+1,+1,0), float4(1,0,1,1)},
+        {float4(+1,-1,+1,0), float4(0.2f,0.2f,0.2f,1)},
     };
     // clang-format on
 
     // Create a vertex buffer that stores cube vertices
     BufferDesc VertBuffDesc;
-    VertBuffDesc.Name          = "Cube vertex buffer";
-    VertBuffDesc.Usage         = USAGE_STATIC;
-    VertBuffDesc.BindFlags     = BIND_VERTEX_BUFFER;
-    VertBuffDesc.uiSizeInBytes = sizeof(CubeVerts);
+    VertBuffDesc.Mode              = BUFFER_MODE_STRUCTURED;
+    VertBuffDesc.Name              = "Cube vertex buffer";
+    VertBuffDesc.Usage             = USAGE_STATIC;
+    VertBuffDesc.BindFlags         = BIND_VERTEX_BUFFER | BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
+    VertBuffDesc.uiSizeInBytes     = sizeof(CubeVerts);
+    VertBuffDesc.ElementByteStride = sizeof(Vertex);
     BufferData VBData;
     VBData.pData    = CubeVerts;
     VBData.DataSize = sizeof(CubeVerts);
     m_pDevice->CreateBuffer(VertBuffDesc, &VBData, &m_CubeVertexBuffer);
+
+    m_pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "vertices")->
+        Set(m_CubeVertexBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 }
 
 void Tutorial02_Cube::CreateIndexBuffer()
@@ -204,14 +217,19 @@ void Tutorial02_Cube::CreateIndexBuffer()
     // clang-format on
 
     BufferDesc IndBuffDesc;
-    IndBuffDesc.Name          = "Cube index buffer";
-    IndBuffDesc.Usage         = USAGE_STATIC;
-    IndBuffDesc.BindFlags     = BIND_INDEX_BUFFER;
-    IndBuffDesc.uiSizeInBytes = sizeof(Indices);
+    IndBuffDesc.Name              = "Cube index buffer";
+    IndBuffDesc.Mode              = BUFFER_MODE_STRUCTURED;
+    IndBuffDesc.Usage             = USAGE_STATIC;
+    IndBuffDesc.BindFlags         = BIND_INDEX_BUFFER | BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
+    IndBuffDesc.uiSizeInBytes     = sizeof(Indices);
+    IndBuffDesc.ElementByteStride = sizeof(Uint32);
     BufferData IBData;
     IBData.pData    = Indices;
     IBData.DataSize = sizeof(Indices);
     m_pDevice->CreateBuffer(IndBuffDesc, &IBData, &m_CubeIndexBuffer);
+
+    m_pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "indices")->
+        Set(m_CubeIndexBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
 }
 
 void Tutorial02_Cube::Initialize(IEngineFactory*  pEngineFactory,
@@ -243,24 +261,23 @@ void Tutorial02_Cube::Render()
         *CBConstants = m_WorldViewProjMatrix.Transpose();
     }
 
-    // Bind vertex and index buffers
-    Uint32   offset   = 0;
-    IBuffer* pBuffs[] = {m_CubeVertexBuffer};
-    m_pImmediateContext->SetVertexBuffers(0, 1, pBuffs, &offset, RESOURCE_STATE_TRANSITION_MODE_TRANSITION, SET_VERTEX_BUFFERS_FLAG_RESET);
-    m_pImmediateContext->SetIndexBuffer(m_CubeIndexBuffer, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-
     // Set the pipeline state
     m_pImmediateContext->SetPipelineState(m_pPSO);
     // Commit shader resources. RESOURCE_STATE_TRANSITION_MODE_TRANSITION mode
     // makes sure that resources are transitioned to required states.
     m_pImmediateContext->CommitShaderResources(m_pSRB, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
 
+    /*
     DrawIndexedAttribs DrawAttrs;     // This is an indexed draw call
     DrawAttrs.IndexType  = VT_UINT32; // Index type
     DrawAttrs.NumIndices = 36;
     // Verify the state of vertex and index buffers
     DrawAttrs.Flags = DRAW_FLAG_VERIFY_ALL;
     m_pImmediateContext->DrawIndexed(DrawAttrs);
+     */
+    DrawAttribs drawAttrs;
+    drawAttrs.NumVertices = 36;
+    m_pImmediateContext->Draw(drawAttrs);
 }
 
 void Tutorial02_Cube::Update(double CurrTime, double ElapsedTime)
