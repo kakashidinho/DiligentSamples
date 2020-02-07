@@ -218,9 +218,9 @@ void Tutorial02_Cube::CreateIndexBuffer()
 
     BufferDesc IndBuffDesc;
     IndBuffDesc.Name              = "Cube index buffer";
-    IndBuffDesc.Mode              = BUFFER_MODE_STRUCTURED;
+    IndBuffDesc.Mode              = BUFFER_MODE_FORMATTED;
     IndBuffDesc.Usage             = USAGE_STATIC;
-    IndBuffDesc.BindFlags         = BIND_INDEX_BUFFER | BIND_UNORDERED_ACCESS | BIND_SHADER_RESOURCE;
+    IndBuffDesc.BindFlags         = BIND_INDEX_BUFFER | BIND_SHADER_RESOURCE;
     IndBuffDesc.uiSizeInBytes     = sizeof(Indices);
     IndBuffDesc.ElementByteStride = sizeof(Uint32);
     BufferData IBData;
@@ -228,8 +228,17 @@ void Tutorial02_Cube::CreateIndexBuffer()
     IBData.DataSize = sizeof(Indices);
     m_pDevice->CreateBuffer(IndBuffDesc, &IBData, &m_CubeIndexBuffer);
 
-    m_pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "indices")->
-        Set(m_CubeIndexBuffer->GetDefaultView(BUFFER_VIEW_SHADER_RESOURCE));
+    {
+        BufferViewDesc ViewDesc;
+        ViewDesc.ViewType             = BUFFER_VIEW_SHADER_RESOURCE;
+        ViewDesc.Format.ValueType     = VT_UINT32;
+        ViewDesc.Format.NumComponents = 1;
+
+        RefCntAutoPtr<IBufferView> indexSRV;
+        m_CubeIndexBuffer->CreateView(ViewDesc, &indexSRV);
+
+        m_pSRB->GetVariableByName(SHADER_TYPE_VERTEX, "indices")->Set(indexSRV);
+    }
 }
 
 void Tutorial02_Cube::Initialize(IEngineFactory*  pEngineFactory,
